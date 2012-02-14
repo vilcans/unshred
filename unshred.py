@@ -24,55 +24,59 @@ def get_color_distance(c1, c2):
     """Gets the euclidian distance between two (color) vectors."""
     return sqrt(sum((a - b) ** 2 for a, b in zip(c1, c2)))
 
-def get_correlation(left_shred, right_shred):
-    """Gets how well left_shred fits to the left of right_shred.
+cached_differences = {}
+def get_difference(left_shred, right_shred):
+    """Gets how badly left_shred fits to the left of right_shred.
     left_shred and right_shred are shred indexes.
     """
+    if (left_shred, right_shred) in cached_differences:
+        return cached_differences[(left_shred, right_shred)]
     difference = 0.0
-    for y in xrange(height):
-        left_pixel = get_pixel(shred_width * (left_shred + 1) - 1, y)
-        right_pixel = get_pixel(shred_width * right_shred, y)
-        difference += get_color_distance(left_pixel, right_pixel)
-    return 1.0 / (difference + 1)
+    left_x = shred_width * (left_shred + 1) - 1
+    right_x = shred_width * right_shred
+    for y in xrange(1, height - 1):
+        difference += min((
+            get_color_distance(get_pixel(left_x, y), get_pixel(right_x, y - 1)),
+            get_color_distance(get_pixel(left_x, y), get_pixel(right_x, y)),
+            get_color_distance(get_pixel(left_x, y), get_pixel(right_x, y + 1))
+        ))
+    cached_differences[(left_shred, right_shred)] = difference
+    return difference
 
-
-def save(sequence):
+def save(sequence, filename):
+    print 'saving', filename
     unshredded = Image.new('RGB', image.size)
     for i, shred_index in enumerate(sequence):
         shred_x1, shred_y1 = shred_width * shred_index, 0
         shred_x2, shred_y2 = shred_x1 + shred_width, height
         region = image.crop((shred_x1, shred_y1, shred_x2, shred_y2))
         unshredded.paste(region, (shred_width * i, 0))
-    unshredded.save('unshredded.png')
+    unshredded.save(filename)
 
 
-correlations = []
+best_right = [None] * number_of_shreds
 for left in xrange(number_of_shreds):
-    #correlations.append([])
+    diffs = []
     for right in xrange(number_of_shreds):
         if left == right:
             continue
-        correlation = get_correlation(left, right)
-        #print left, right, correlation
-        #correlations[-1].append((correlation, left, right))
-        correlations.append((correlation, left, right))
+        difference = get_difference(left, right)
+        diffs.append((difference, right))
+    best_right[left] = sorted(diffs)[0]
 
-correlations.sort(reverse=True)
-rights = {}  # Maps from left shred to the right
-lefts = {}  # Maps from right shred to the left
-for _, left_shred, right_shred in correlations:
-    if left_shred in rights or right_shred in lefts:
-        continue
-    rights[left_shred] = right_shred
-    lefts[right_shred] = left_shred
-    if len(rights) == number_of_shreds:
-        break
+sequences = []
+for leftmost in xrange(number_of_shreds):
+    sequence = [leftmost]
+    i = best_right[leftmost][1]
+    while len(sequence) != number_of_shreds:
+        sequence.append(i)
+        i = best_right[i][1]
+    total_difference = sum(
+        get_difference(sequence[i], sequence[i + 1])
+        for i in range(number_of_shreds - 1)
+    )
+    sequences.append((total_difference, sequence))
 
-
-sequence = []
-i = 8
-for _ in xrange(number_of_shreds):
-    sequence.append(i)
-    i = rights[i]
-
-save(sequence)
+sequences.sort()
+print sequences
+save(sequences[0][1], 'unshredded.png')
