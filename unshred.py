@@ -3,7 +3,7 @@
 from math import sqrt
 from PIL import Image
 
-image = Image.open('TokyoPanoramaShreddedNumbered.png')
+image = Image.open('shredded.png')
 data = image.getdata()
 width, height = image.size
 
